@@ -226,3 +226,73 @@ button { font-family: inherit; cursor: pointer; }
   margin-top: 16px;
   object-fit: contain;
 }
+
+/* =========================================
+   Print Styles for PDF Export
+========================================= */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    min-height: auto;
+    background-image: none !important;
+  }
+
+  .header button,
+  .upload-area,
+  .btn-primary,
+  .btn-outline,
+  nav {
+    display: none !important;
+  }
+
+  .glass-panel {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    color: black !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  .glass-panel h2 {
+    color: black !important;
+  }
+  
+  .result-card h3,
+  .result-card h4,
+  .result-card p,
+  .result-card ul,
+  .result-card li {
+    color: black !important;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  .logo span {
+    color: black !important;
+    -webkit-text-fill-color: black !important;
+  }
+  
+  /* Remove gradients for print */
+  .status-badge {
+    border: 1px solid #ccc !important;
+    background: transparent !important;
+  }
+  .status-badge.normal { color: green !important; }
+  .status-badge.abnormal { color: red !important; }
+
+  /* Ensure the SVG images don't get cutoff */
+  .image-preview {
+    max-height: 600px;
+    margin: 0 auto;
+    display: block;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

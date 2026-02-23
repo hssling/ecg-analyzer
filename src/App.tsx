@@ -6,7 +6,9 @@ import {
   Activity, 
   AlertCircle, 
   Clock,
-  Download
+  Download,
+  Printer,
+  Copy
 } from 'lucide-react';
 import { Client } from '@gradio/client';
 import './index.css';
@@ -165,8 +167,8 @@ function App() {
             <span>CardioAI</span>
           </div>
           <nav>
-            <button className="btn-outline">
-              <Clock size={18} /> History
+            <button className="btn-outline" onClick={() => window.print()} title="Print or Save PDF">
+              <Printer size={18} /> Export
             </button>
           </nav>
         </header>
@@ -318,9 +320,14 @@ function App() {
                   </ul>
                 </div>
 
-                <button className="btn-outline" style={{ marginTop: '16px', justifyContent: 'center' }}>
-                  <Download size={18} /> Download Full PDF Report
-                </button>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '16px', justifyContent: 'center' }}>
+                  <button className="btn-outline" onClick={() => window.print()}>
+                    <Printer size={18} /> Print Report
+                  </button>
+                  <button className="btn-outline" onClick={() => navigator.clipboard.writeText(JSON.stringify(result, null, 2))}>
+                    <Copy size={18} /> Copy Data
+                  </button>
+                </div>
               </div>
             )}
           </div>
