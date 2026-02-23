@@ -23,7 +23,7 @@ interface DiagnosisResult {
 }
 
 // Client-side execution of Hugging Face Space Gradio backend
-const analyzeECG = async (file: File, onTextStream?: (text: string) => void): Promise<DiagnosisResult> => {
+const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
   console.log("Preparing file for inference:", file.name);
 
   try {
