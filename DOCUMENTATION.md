@@ -2,9 +2,9 @@
 
 ## Overview
 
-CardioAI is a state-of-the-art web application designed for automated, AI-assisted diagnosis of Electrocardiogram (ECG) scans. By leveraging advanced foundation models—specifically the Multimodal Large Language Model (MLLM) `PULSE-ECG/PULSE-7B` hosted on Hugging Face—CardioAI can ingest standard 12-lead ECG images and produce comprehensive clinical reports.
+CardioAI is a state-of-the-art web application designed for automated, AI-assisted diagnosis of Electrocardiogram (ECG) scans. By leveraging a highly custom-trained Vision-Language Model (`Qwen2-VL` fine-tuned via LoRA) hosted on a dedicated Hugging Face Space, CardioAI can ingest standard 12-lead ECG images and produce comprehensive clinical reports.
 
-The application is built with a React + Vite frontend and utilizes Netlify Serverless Functions as a secure proxy backend. This architecture ensures high performance, a premium user experience with modern UI aesthetics, and enterprise-grade security for API keys.
+The application is built with a React + Vite frontend and utilizes `@gradio/client` to securely interface directly with our custom Hugging Face Space Serverless API. This architecture ensures high performance, a premium user experience, and completely free serverless operation with zero DevOps overhead.
 
 ---
 
@@ -14,7 +14,7 @@ CardioAI is designed to empower healthcare professionals and researchers with th
 
 ### 1. Robust Multimodal Image Inference
 
-CardioAI natively processes ECG images containing standard cardiac wave tracings. Powered by the Hugging Face Inference API and `PULSE-7B`, the application "reads" the visual patterns of an ECG scan, mimicking a cardiologist's visual assessment.
+CardioAI natively processes ECG images containing standard cardiac wave tracings. Powered by our custom fine-tuned `Qwen2-VL` adapter hosted on a Hugging Face Space, the application "reads" the visual patterns of an ECG scan, mimicking a cardiologist's visual assessment.
 
 ### 2. Multi-Class Diagnostic Reporting
 
@@ -37,31 +37,31 @@ Unlike traditional binary classifiers, the MLLM architecture attempts to extract
 
 ### 4. Zero-Config Cloud Deployment
 
-The app is orchestrated with a `netlify.toml` file, meaning the entire React application and the API layer (Serverless Functions) are automatically deployed the moment code is pushed to a connected repository. No DevOps overhead is required.
+The frontend is orchestrated via Netlify, while the backend API (`hssling/cardioai-api`) is synced automatically via GitHub Actions from our `ecg-analyzer-model` training repository to a Hugging Face Space.
 
-### 5. Secure Backend Proxy
+### 5. Secure Backend API connection
 
-Directly calling Hugging Face from a React client exposes billing/API tokens. CardioAI bypasses this by utilizing Netlify Functions (`netlify/functions/analyze_ecg.js`). The frontend simply requests the local API, which then injects the `HF_TOKEN` entirely server-side, securing your Hugging Face credentials.
+The frontend utilizes `@gradio/client` over secure WebSockets directly to the Hugging Face Space, completely avoiding local heavy GPUs or manual AWS configurations. This provides a lightning-fast, highly scalable production endpoint.
 
 ---
 
 ## ⚡ Performance Parameters
 
-The exact performance of the CardioAI system depends on two major factors: the host infrastructure (Netlify) and the AI Inference provider (Hugging Face).
+The exact performance of the CardioAI system depends on two major factors: the host infrastructure (Netlify) and the Hugging Face Space container state.
 
 ### Latency and Inference Speed
 
-- **Cold Start Latency:** Hugging Face Inference API dynamically scales endpoints. If the `PULSE-7B` model has not been used recently, there is a "cold start" period where Hugging Face loads the 7-Billion parameter weights into GPU VRAM. This can take **~60 to 120 seconds**. The cardioAI frontend automatically detects HTTP 503 states during this period and gracefully prompts the user to wait.
-- **Warm Inference Latency:** Once the model is actively loaded into HF GPU memory, inference typically takes **5 to 15 seconds** depending on the complexity of the scan and the image resolution submitted.
+- **Cold Start Latency:** Free Hugging Face Spaces spin down to sleep after inactivity. It can take **~60 to 120 seconds** to boot the container back up. The `App.tsx` logic elegantly waits while alerting the user if the backend is actively booting.
+- **Warm Inference Latency:** Once the model is actively loaded into GPU/CPU memory, inference typically takes **5 to 15 seconds**.
 - **Frontend Rendering:** The React + Vite SPA (Single Page Application) is aggressively minified, exhibiting a Time-to-Interactive (TTI) of <1 second on average broadband.
 
-### AI Model Accuracy and Efficacy (`PULSE-7B`)
+### AI Model Accuracy and Efficacy (`Qwen2-VL Custom Adapter`)
 
-`PULSE-ECG/PULSE-7B` is trained on a massive instruction dataset (`ECGInstruct`) comprising over 1,000,000 ECG instruction-tuning samples. It performs remarkably well compared to standard deterministic algorithms:
+Your backend consists of a Kaggle-trained adapter merging domain-specific ECG datasets with `Qwen2-VL`:
 
 - **Contextual Understanding:** Can synthesize text-based reports rather than just categorical labels, providing nuanced explanations for _why_ it suspects a specific diagnosis.
 - **Limitation (Research Use):** While highly capable, this model is a research prototype. It should **not** entirely replace human expert clinical judgment. It acts as an augmented intelligence assistant.
-- **Fine-tuning Potential:** The application includes a script (`train_ecg_model.py`) that demonstrates the pipeline for further fine-tuning smaller Vision Transformers (like ViT) specifically on `PTB-XL` (a massive clinical dataset of 21,000+ 12-lead ECGs) to achieve even higher deterministic classification accuracy metrics (often exceeding 90% ROC-AUC on standard arrhythmia detection).
+- **Continuous Learning Pipeline:** Provided in the `ecg-analyzer-model` repo is `train_ecg.py`. When mounted to Kaggle's T4x2 GPU infrastructure, this fully automated script wipes old progress, clones your GitHub, downloads massive datasets (like `PTB-XL` or `10k-Control`), loops for multiple deep epochs, applies QLoRA quantization, and automatically overwrites the Hub weights out to `hssling/cardioai-adapter`, triggering a 0-touch CI/CD pipeline down to the frontend.
 
 ---
 
@@ -69,9 +69,9 @@ The exact performance of the CardioAI system depends on two major factors: the h
 
 1.  **Frontend:** React 18, TypeScript, Vite
 2.  **Styling:** Vanilla CSS 3 with custom CSS Variables for a glassmorphic dark theme (No Tailwind dependency). Icons by `lucide-react`.
-3.  **Backend Services:** Netlify Serverless Functions (Node.js/JavaScript).
-4.  **AI Engine:** Hugging Face Inference API (`https://api-inference.huggingface.co`).
-5.  **Default Model:** `PULSE-ECG/PULSE-7B` (Multimodal LLM designed specifically for Electrocardiograms).
+3.  **Backend Services:** Gradio API Client on a Serverless Python Backend.
+4.  **AI Engine:** Hugging Face Spaces Containerization (`hssling/cardioai-api`).
+5.  **Default Model:** Custom fine-tuned `Qwen2-VL-2B` Adapter targeting Electrocardiograms.
 
 ---
 
