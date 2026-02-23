@@ -1,73 +1,51 @@
-# React + TypeScript + Vite
+# CardioAI: ECG Diagnosis & Reporting App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+CardioAI is a premium, AI-assisted web application for ECG diagnosis and reporting, designed for healthcare professionals. This repository contains the frontend application and a training script for fine-tuning Foundation Models on public high-quality ECG datasets.
 
-Currently, two official plugins are available:
+## Objectives
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. **AI-Assisted Diagnosis**: Enable instantaneous analysis using high-performance Vision and Multimodal models based on ECG images.
+2. **Premium Visuals**: Provide a modern, glassmorphic UI utilizing Dark Mode aesthetics to enhance usability.
+3. **Seamless Deployment**: Integrated with `netlify.toml` for zero-configuration, continuous deployment to Netlify.
 
-## React Compiler
+## Project Structure
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `src/`: The React + Vite frontend application source code.
+- `index.html`: The entry point and SEO-optimized markup.
+- `netlify.toml`: Netlify build settings to ensure the React router SPA correctly manages redirects and outputs the production bundle.
+- `train_ecg_model.py`: A Hugging Face `transformers` Python script outlining how to train a model to evaluate the `edcci/GenECG` dataset (which is derived from the official `PTB-XL` dataset).
 
-## Expanding the ESLint configuration
+## Running the Web App Locally
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Ensure you have Node.js installed, then run:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Your server will typically deploy to `http://localhost:5173`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Deployment to Netlify
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+This project is already equipped with `netlify.toml` for rapid deployment.
+
+1. Create a Netlify Account.
+2. Connect your GitHub repository containing this app.
+3. Netlify will automatically detect Vite and run `npm run build` using the settings from `netlify.toml` to output your `.dist/` production assets.
+
+## Integration with AI Models (MedGemma & HF)
+
+Currently, the `App.tsx` file features a **simulated Hugging Face API call** with a high-fidelity interface, enabling frontend testing and rapid prototyping without incurring GPU/API costs.
+
+To run inference on actual pretrained models or your own fine-tuned `MedGemma` / Vision Transformer checkpoints, edit the `mockAnalyzeECG` function in `src/App.tsx` and integrate the official Hugging Face `@huggingface/inference` JavaScript client.
+
+## Training Custom ECG Models
+
+Refer to the included `train_ecg_model.py` script. It demonstrates how to utilize `ptb-xl` based datasets (specifically image-based versions like `edcci/GenECG`) to build multi-class cardiovascular diagnostic engines with standard Transformers logic.
+
+Requirements to train locally or in HF Spaces:
+
+```bash
+pip install transformers datasets torch torchvision accelerate
 ```
