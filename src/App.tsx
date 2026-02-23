@@ -5,14 +5,25 @@ import {
   FileText, 
   Activity, 
   AlertCircle, 
-  CheckCircle,
   Clock,
   Download
 } from 'lucide-react';
 import './index.css';
 
+interface DiagnosisResult {
+  diagnosis: string;
+  confidence: number;
+  heartRate: number;
+  rhythm: string;
+  stSegment: string;
+  qtInterval: string;
+  findings: string[];
+  recommendations: string[];
+}
+
 // Mock analysis function using a timeout to simulate a Hugging Face API call
-const mockAnalyzeECG = async (file: File) => {
+const mockAnalyzeECG = async (file: File): Promise<DiagnosisResult> => {
+  console.log("Analyzing file:", file.name);
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
@@ -42,7 +53,7 @@ function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'complete'>('idle');
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<DiagnosisResult | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
