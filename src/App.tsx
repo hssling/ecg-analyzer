@@ -5,8 +5,6 @@ import {
   FileText, 
   Activity, 
   AlertCircle, 
-  Clock,
-  Download,
   Printer,
   Copy
 } from 'lucide-react';
