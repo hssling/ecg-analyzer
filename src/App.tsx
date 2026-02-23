@@ -21,39 +21,48 @@ interface DiagnosisResult {
   recommendations: string[];
 }
 
-// Mock analysis function using a timeout to simulate a Hugging Face API call
-const mockAnalyzeECG = async (file: File): Promise<DiagnosisResult> => {
-  console.log("Analyzing file:", file.name);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        diagnosis: 'Atrial Fibrillation',
-        confidence: 0.94,
-        heartRate: 112,
-        rhythm: 'Irregularly irregular',
-        stSegment: 'Normal',
-        qtInterval: '420ms (Borderline)',
-        findings: [
-          'Absence of distinct P waves',
-          'Irregular R-R intervals',
-          'Fibrillatory f waves present in lead V1'
-        ],
-        recommendations: [
-          'Cardiology consultation recommended',
-          'Evaluate for anticoagulation therapy based on CHA2DS2-VASc score',
-          'Consider rate control vs rhythm control strategy'
-        ]
-      });
-    }, 3000);
+// Replaces the mock to hit our Netlify function mapping to Hugging Face
+const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
+  console.log("Preparing file for inference:", file.name);
+
+  // Convert File to Base64
+  const toBase64 = (f: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(f);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
   });
+
+  const base64Str = await toBase64(file);
+
+  try {
+    const response = await fetch('/api/analyze_ecg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64Str })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}: ${await response.text()}`);
+    }
+
+    return await response.json();
+  } catch (error: unknown) {
+    console.error("Inference Error:", error);
+    if (error instanceof Error) {
+      throw new Error(error.message || "Failed to analyze ECG");
+    }
+    throw new Error("Failed to analyze ECG");
+  }
 };
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'complete'>('idle');
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'complete' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<DiagnosisResult | null>(null);
+  const [errorText, setErrorText] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +78,7 @@ function App() {
     setPreviewUrl(URL.createObjectURL(selectedFile));
     setStatus('idle');
     setResult(null);
+    setErrorText(null);
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -95,26 +105,35 @@ function App() {
     
     setStatus('analyzing');
     setProgress(0);
+    setErrorText(null);
     
-    // Simulate progress
+    // Simulate loading bar since we don't stream real progress
     const interval = setInterval(() => {
       setProgress(p => {
-        if (p >= 90) {
+        if (p >= 95) {
           clearInterval(interval);
-          return 90;
+          return 95;
         }
-        return p + 10;
+        return p + 5;
       });
-    }, 300);
+    }, 500);
 
-    const data = await mockAnalyzeECG(file);
-    clearInterval(interval);
-    setProgress(100);
-    
-    setTimeout(() => {
+    try {
+      const data = await analyzeECG(file);
+      clearInterval(interval);
+      setProgress(100);
       setResult(data);
       setStatus('complete');
-    }, 500);
+    } catch (err: unknown) {
+      clearInterval(interval);
+      setProgress(0);
+      if (err instanceof Error) {
+        setErrorText(err.message);
+      } else {
+        setErrorText("An unknown error occurred");
+      }
+      setStatus('error');
+    }
   };
 
   const reset = () => {
@@ -122,6 +141,7 @@ function App() {
     setPreviewUrl(null);
     setStatus('idle');
     setResult(null);
+    setErrorText(null);
     setProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -223,10 +243,21 @@ function App() {
               </div>
             )}
 
+            {status === 'error' && (
+              <div style={{ textAlign: 'center', color: 'var(--error)', padding: '40px 0' }}>
+                <AlertCircle size={48} style={{ opacity: 0.8, marginBottom: '16px' }} />
+                <p><strong>Diagnosis Failed</strong></p>
+                <p style={{ fontSize: '0.9rem', marginTop: '8px', color: 'var(--text-muted)' }}>{errorText}</p>
+              </div>
+            )}
+
             {status === 'analyzing' && (
               <div style={{ textAlign: 'center', color: 'var(--primary)', padding: '40px 0' }}>
                 <HeartPulse size={48} className="animate-pulse" style={{ marginBottom: '16px' }} />
-                <p>MedGemma inference model is running...</p>
+                <p>Contacting MedGemma / PULSE-ECG HF Endpoint...</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  This may take up to 2 minutes if the model is waking up.
+                </p>
               </div>
             )}
 
