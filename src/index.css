@@ -296,3 +296,45 @@ button { font-family: inherit; cursor: pointer; }
     break-inside: avoid;
   }
 }
+
+/* Universal Footer */
+.app-footer {
+  margin-top: 2rem;
+  padding: 1rem 1.5rem;
+  background-color: rgba(14, 23, 38, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  grid-column: 1 / -1;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.footer-creator strong, .footer-models strong {
+  color: var(--text-light);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .footer-content {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+}
+
+.hide-on-print {
+  display: block;
+}
+@media print {
+  .hide-on-print {
+    display: none !important;
+  }
+}

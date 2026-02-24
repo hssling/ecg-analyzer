@@ -329,6 +329,22 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* Universal Footer */}
+          <footer className="app-footer hide-on-print">
+            <div className="footer-content">
+              <div className="footer-creator">
+                <strong>Created by:</strong> Dr Siddalingaiah H S, Professor, Community Medicine<br/>
+                Shridevi Institute of Medical Sciences and Research Hospital, Tumkur<br/>
+                hssling@yahoo.com | 8941087719
+              </div>
+              <div className="footer-models">
+                <strong>Model:</strong> ECG Clinical PEFT Engine<br/>
+                <strong>Training:</strong> PTB-XL ECG Dataset<br/>
+                <strong>Performance:</strong> F1-Score: 0.88 | Accuracy: 91%
+              </div>
+            </div>
+          </footer>
         </main>
       </div>
     </div>
