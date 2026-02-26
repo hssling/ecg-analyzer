@@ -21,6 +21,35 @@ const parseSSE = (raw) => {
 
 const buildDiagnosis = (rawMarkdown) => {
   const lower = rawMarkdown.toLowerCase();
+  const nonDiagnostic = [
+    "i'm sorry",
+    "i am sorry",
+    "as an ai",
+    "i don't have the capability",
+    "cannot analyze",
+    "can't analyze",
+    "unable to interpret",
+    "feel free to ask"
+  ].some((token) => lower.includes(token));
+
+  if (nonDiagnostic) {
+    return {
+      diagnosis: "Non-Diagnostic Output",
+      confidence: 0.25,
+      heartRate: 0,
+      rhythm: "Not Determined",
+      stSegment: "Not Determined",
+      qtInterval: "Not Determined",
+      findings: ["Model returned a non-diagnostic response for this ECG image."],
+      recommendations: [
+        "Re-upload a high-resolution ECG with clear leads.",
+        "Retry after model warm restart if this persists.",
+        "Use physician review for immediate interpretation."
+      ],
+      rawMarkdown
+    };
+  }
+
   const isAbnormal =
     lower.includes("abnormal") ||
     lower.includes("ischemia") ||

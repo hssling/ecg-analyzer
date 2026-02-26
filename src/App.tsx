@@ -140,6 +140,20 @@ const buildRecommendations = (abnormal: boolean): string[] => {
   ];
 };
 
+const isNonDiagnosticNarrative = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  return [
+    "i'm sorry",
+    "i am sorry",
+    "as an ai",
+    "i don't have the capability",
+    "cannot analyze",
+    "can't analyze",
+    "unable to interpret",
+    "feel free to ask"
+  ].some((token) => lower.includes(token));
+};
+
 const isDiagnosisResult = (value: unknown): value is DiagnosisResult => {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
@@ -202,6 +216,24 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
     }
 
     const lower = rawMarkdown.toLowerCase();
+    const nonDiagnostic = isNonDiagnosticNarrative(rawMarkdown);
+    if (nonDiagnostic) {
+      return {
+        diagnosis: "Non-Diagnostic Output",
+        confidence: 0.25,
+        heartRate: 0,
+        rhythm: "Not Determined",
+        stSegment: "Not Determined",
+        qtInterval: "Not Determined",
+        findings: ["Model returned a non-diagnostic response for this ECG image. Please retry with a clearer 12-lead ECG image."],
+        recommendations: [
+          "Re-upload a high-resolution ECG image with clear waveforms.",
+          "If repeated, retrain or retune the model prompt/instruction set.",
+          "Use physician review for immediate interpretation."
+        ]
+      };
+    }
+
     const isAbnormal =
       lower.includes("abnormal") ||
       lower.includes("ischemia") ||
