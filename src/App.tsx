@@ -55,6 +55,14 @@ const parseSSE = (raw: string): { eventType: string; dataLine: string } => {
   return { eventType, dataLine };
 };
 
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Failed to read uploaded file"));
+    reader.readAsDataURL(file);
+  });
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = HF_FETCH_TIMEOUT_MS): Promise<Response> => {
@@ -81,6 +89,30 @@ const fetchWithRetry = async (input: string, init: RequestInit = {}, retries = H
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Network request failed");
+};
+
+const isNetworkError = (message: string): boolean => {
+  const lower = message.toLowerCase();
+  return lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("load failed");
+};
+
+const analyzeViaNetlifyFallback = async (file: File): Promise<DiagnosisResult> => {
+  const imageBase64 = await fileToDataUrl(file);
+  const response = await fetch("/api/analyze_ecg", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageBase64 })
+  });
+
+  const rawBody = await response.text();
+  const payload = parseJsonSafely(rawBody) as Record<string, unknown> | null;
+  if (!response.ok) {
+    const details = payload && typeof payload.details === "string" ? payload.details : "";
+    const core = payload && typeof payload.error === "string" ? payload.error : `Fallback failed (HTTP ${response.status})`;
+    throw new Error(`${core}${details ? `: ${details}` : ""}`);
+  }
+  if (!isDiagnosisResult(payload)) throw new Error("Fallback returned invalid payload");
+  return payload;
 };
 
 const splitClinicalSentences = (text: string, maxItems = 4): string[] => {
@@ -199,8 +231,12 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
   } catch (error: unknown) {
     console.error("Inference Error:", error);
     const message = toErrorMessage(error);
-    if (message.toLowerCase().includes("failed to fetch") || message.toLowerCase().includes("networkerror")) {
-      throw new Error("HF Space network connection failed after retries. Check internet/VPN/adblock and retry.");
+    if (isNetworkError(message)) {
+      try {
+        return await analyzeViaNetlifyFallback(file);
+      } catch (fallbackError: unknown) {
+        throw new Error(`HF Space inference failed (direct + fallback): ${toErrorMessage(fallbackError)}`);
+      }
     }
     throw new Error(`HF Space inference failed: ${message}`);
   }

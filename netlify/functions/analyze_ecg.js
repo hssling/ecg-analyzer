@@ -1,4 +1,5 @@
 const HF_SPACE_URL = process.env.HF_SPACE_URL || "https://hssling-cardioai-api.hf.space";
+const FALLBACK_MAX_TOKENS = Number(process.env.HF_MAX_TOKENS || 384);
 
 const parseDataUrl = (value) => {
   if (!value || typeof value !== "string") return null;
@@ -83,7 +84,7 @@ export const handler = async (event) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        data: [{ path: uploadedPath }, 0.2, 1500]
+        data: [{ path: uploadedPath }, 0.2, FALLBACK_MAX_TOKENS]
       })
     });
     if (!callRes.ok) {
