@@ -39,6 +39,27 @@ const toErrorMessage = (error: unknown): string => {
   }
 };
 
+const parseJsonSafely = (value: string): unknown | null => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const isDiagnosisResult = (value: unknown): value is DiagnosisResult => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.diagnosis === "string" &&
+    typeof candidate.confidence === "number" &&
+    typeof candidate.heartRate === "number" &&
+    typeof candidate.rhythm === "string" &&
+    typeof candidate.stSegment === "string" &&
+    typeof candidate.qtInterval === "string" &&
+    Array.isArray(candidate.findings) &&
+    Array.isArray(candidate.recommendations);
+};
+
 // Client-side execution of Hugging Face Space Gradio backend
 const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
   console.log("Preparing file for inference:", file.name);
@@ -53,14 +74,20 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
       body: JSON.stringify({ imageBase64 })
     });
 
-    const payload = await response.json();
+    const rawBody = await response.text();
+    const payload = parseJsonSafely(rawBody) as Record<string, unknown> | null;
     if (!response.ok) {
-      const details = typeof payload?.details === "string" ? payload.details : "";
-      const core = typeof payload?.error === "string" ? payload.error : "Inference failed";
-      throw new Error(`${core}${details ? `: ${details}` : ""}`);
+      const details = payload && typeof payload.details === "string" ? payload.details : "";
+      const core = payload && typeof payload.error === "string" ? payload.error : `Inference failed (HTTP ${response.status})`;
+      const fallback = rawBody.trim().slice(0, 180).replace(/\s+/g, " ");
+      throw new Error(`${core}${details ? `: ${details}` : fallback ? `: ${fallback}` : ""}`);
     }
 
-    return payload as DiagnosisResult;
+    if (!isDiagnosisResult(payload)) {
+      throw new Error("Inference API returned invalid payload shape");
+    }
+
+    return payload;
   } catch (error: unknown) {
     console.error("Inference Error:", error);
     throw new Error(`Diagnosis backend failed: ${toErrorMessage(error)}`);
