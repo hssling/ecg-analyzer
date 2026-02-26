@@ -23,6 +23,8 @@ interface DiagnosisResult {
 
 const HF_SPACE_URL = "https://hssling-cardioai-api.hf.space";
 const HF_MAX_TOKENS = 768;
+const HF_FETCH_TIMEOUT_MS = 45000;
+const HF_FETCH_RETRIES = 3;
 
 const toErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -51,6 +53,34 @@ const parseSSE = (raw: string): { eventType: string; dataLine: string } => {
     if (line.startsWith("data:")) dataLine = line.slice(5).trim();
   }
   return { eventType, dataLine };
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchWithTimeout = async (input: string, init: RequestInit = {}, timeoutMs = HF_FETCH_TIMEOUT_MS): Promise<Response> => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+};
+
+const fetchWithRetry = async (input: string, init: RequestInit = {}, retries = HF_FETCH_RETRIES): Promise<Response> => {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(input, init);
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) {
+        await sleep(1000 * attempt);
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Network request failed");
 };
 
 const splitClinicalSentences = (text: string, maxItems = 4): string[] => {
@@ -99,7 +129,7 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
     const uploadForm = new FormData();
     uploadForm.append("files", file, file.name || "ecg_upload.png");
 
-    const uploadRes = await fetch(`${HF_SPACE_URL}/upload`, {
+    const uploadRes = await fetchWithRetry(`${HF_SPACE_URL}/upload`, {
       method: "POST",
       body: uploadForm
     });
@@ -110,7 +140,7 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
     const uploadedPath = Array.isArray(uploadBody) ? uploadBody[0] : null;
     if (!uploadedPath || typeof uploadedPath !== "string") throw new Error("HF upload returned no file path");
 
-    const callRes = await fetch(`${HF_SPACE_URL}/call/predict`, {
+    const callRes = await fetchWithRetry(`${HF_SPACE_URL}/call/predict`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -125,7 +155,7 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
     if (!eventId || typeof eventId !== "string") throw new Error("HF call/predict returned no event_id");
 
     // This endpoint blocks until complete/error and returns SSE text payload.
-    const eventRes = await fetch(`${HF_SPACE_URL}/call/predict/${eventId}`, { method: "GET" });
+    const eventRes = await fetchWithRetry(`${HF_SPACE_URL}/call/predict/${eventId}`, { method: "GET" });
     if (!eventRes.ok) {
       throw new Error(`Predict event failed (HTTP ${eventRes.status}): ${(await eventRes.text()).slice(0, 200)}`);
     }
@@ -168,7 +198,11 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
     return payload;
   } catch (error: unknown) {
     console.error("Inference Error:", error);
-    throw new Error(`HF Space inference failed: ${toErrorMessage(error)}`);
+    const message = toErrorMessage(error);
+    if (message.toLowerCase().includes("failed to fetch") || message.toLowerCase().includes("networkerror")) {
+      throw new Error("HF Space network connection failed after retries. Check internet/VPN/adblock and retry.");
+    }
+    throw new Error(`HF Space inference failed: ${message}`);
   }
 };
 
