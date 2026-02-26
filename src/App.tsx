@@ -22,45 +22,102 @@ interface DiagnosisResult {
   recommendations: string[];
 }
 
+const HF_SPACE_ID = "hssling/cardioai-api";
+const HF_SPACE_URL = "https://hssling-cardioai-api.hf.space/";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const toErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown inference error";
+  }
+};
+
+const isRetryableHFError = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+  return [
+    "503",
+    "loading",
+    "sleep",
+    "build",
+    "space is",
+    "connection errored out",
+    "failed to fetch",
+    "networkerror",
+    "timeout"
+  ].some((token) => normalized.includes(token));
+};
+
 // Client-side execution of Hugging Face Space Gradio backend
 const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
   console.log("Preparing file for inference:", file.name);
 
   try {
-    // Connect to the deployed Serverless Hub
-    const app = await Client.connect("hssling/cardioai-api");
-    
-    // Execute inference call
-    const result = await app.predict("/predict", [
-      file as unknown,
-      0.2,
-      1500
-    ]);
-    
-    const rawMarkdown = (result.data as string[])[0];
+    const maxAttempts = 3;
+    let lastError = "";
+    let app: Awaited<ReturnType<typeof Client.connect>> | null = null;
 
-    // Determine basic rules from textual output from Qwen2-VL
-    const isAbnormal = rawMarkdown.toLowerCase().includes('abnormal') || rawMarkdown.toLowerCase().includes('ischemia') || rawMarkdown.toLowerCase().includes('arrhythmia') || rawMarkdown.toLowerCase().includes('tachycardia') || rawMarkdown.toLowerCase().includes('fibrillation');
-    
-    // Attempt rough extract
-    let hr = 72;
-    const hrMatch = rawMarkdown.match(/(\d{2,3}) (bpm|beats per minute)/i);
-    if(hrMatch) hr = parseInt(hrMatch[1]);
-    else hr = Math.floor(Math.random() * 40) + 55; // Placeholder
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        if (!app) {
+          try {
+            app = await Client.connect(HF_SPACE_ID);
+          } catch {
+            app = await Client.connect(HF_SPACE_URL);
+          }
+        }
 
-    return {
-      diagnosis: isAbnormal ? "Pathological Trace Detected" : "Normal Sinus Rhythm",
-      confidence: Math.random() * 0.1 + 0.89, // ~89%-99% bounding for the confidence UI
-      heartRate: hr,
-      rhythm: isAbnormal ? "Review Markdown Narrative" : "Regular",
-      stSegment: isAbnormal ? "Pending Physician Validation" : "Isoelectric",
-      qtInterval: "Pending exact measurement",
-      findings: [rawMarkdown.slice(0, 100) + "... (See narrative below)"],
-      recommendations: ["Review accompanying text block", "Clinical correlation strictly recommended"]
-    };
+        // Execute inference call
+        const result = await app.predict("/predict", [
+          file as unknown,
+          0.2,
+          1500
+        ]);
+        const data = result.data as unknown[];
+        const rawMarkdown = typeof data?.[0] === "string" ? data[0] : JSON.stringify(data?.[0] ?? "");
+
+        // Determine basic rules from textual output from Qwen2-VL
+        const lower = rawMarkdown.toLowerCase();
+        const isAbnormal = lower.includes('abnormal') || lower.includes('ischemia') || lower.includes('arrhythmia') || lower.includes('tachycardia') || lower.includes('fibrillation');
+        
+        // Attempt rough extract
+        let hr = 72;
+        const hrMatch = rawMarkdown.match(/(\d{2,3}) (bpm|beats per minute)/i);
+        if(hrMatch) hr = parseInt(hrMatch[1]);
+        else hr = Math.floor(Math.random() * 40) + 55; // Placeholder
+
+        return {
+          diagnosis: isAbnormal ? "Pathological Trace Detected" : "Normal Sinus Rhythm",
+          confidence: Math.random() * 0.1 + 0.89, // ~89%-99% bounding for the confidence UI
+          heartRate: hr,
+          rhythm: isAbnormal ? "Review Markdown Narrative" : "Regular",
+          stSegment: isAbnormal ? "Pending Physician Validation" : "Isoelectric",
+          qtInterval: "Pending exact measurement",
+          findings: [rawMarkdown.slice(0, 100) + "... (See narrative below)"],
+          recommendations: ["Review accompanying text block", "Clinical correlation strictly recommended"]
+        };
+      } catch (innerError: unknown) {
+        lastError = toErrorMessage(innerError);
+        if (!isRetryableHFError(lastError) || attempt === maxAttempts) {
+          throw innerError;
+        }
+        await sleep(2000 * attempt);
+        app = null;
+      }
+    }
+
+    throw new Error(lastError || "Unknown inference error");
   } catch (error: unknown) {
     console.error("Inference Error:", error);
-    throw new Error("Failed to reach HF Space Endpoint. It may be sleeping or actively building your new Adapter Weights.");
+    const detail = toErrorMessage(error);
+    if (isRetryableHFError(detail)) {
+      throw new Error("HF Space is warming up or rebuilding. Please wait 30-90 seconds and retry.");
+    }
+    throw new Error(`Failed to reach HF Space endpoint: ${detail}`);
   }
 };
 
