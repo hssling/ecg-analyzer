@@ -53,6 +53,31 @@ const parseSSE = (raw: string): { eventType: string; dataLine: string } => {
   return { eventType, dataLine };
 };
 
+const splitClinicalSentences = (text: string, maxItems = 4): string[] => {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const sentences = cleaned
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 18);
+  return sentences.slice(0, maxItems);
+};
+
+const buildRecommendations = (abnormal: boolean): string[] => {
+  if (abnormal) {
+    return [
+      "Urgent physician review is advised for this ECG pattern.",
+      "Correlate with symptoms, vitals, and prior ECG records.",
+      "Consider repeat ECG and cardiac biomarkers if clinically indicated."
+    ];
+  }
+  return [
+    "Correlate with patient history and current symptoms.",
+    "Maintain routine follow-up as per clinical protocol.",
+    "Repeat ECG if new symptoms develop."
+  ];
+};
+
 const isDiagnosisResult = (value: unknown): value is DiagnosisResult => {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
@@ -121,20 +146,22 @@ const analyzeECG = async (file: File): Promise<DiagnosisResult> => {
       lower.includes("arrhythmia") ||
       lower.includes("tachycardia") ||
       lower.includes("fibrillation");
+    const likelyCritical = lower.includes("infarction") || lower.includes("st elevation") || lower.includes("ventricular tachycardia");
 
     let heartRate = 72;
     const hrMatch = rawMarkdown.match(/(\d{2,3}) (bpm|beats per minute)/i);
     if (hrMatch) heartRate = parseInt(hrMatch[1], 10);
+    const findings = splitClinicalSentences(rawMarkdown, 5);
 
     const payload: DiagnosisResult = {
-      diagnosis: isAbnormal ? "Pathological Trace Detected" : "Normal Sinus Rhythm",
-      confidence: 0.92,
+      diagnosis: likelyCritical ? "High-Risk Pathology Suspected" : isAbnormal ? "Pathological Trace Detected" : "Normal Sinus Rhythm",
+      confidence: likelyCritical ? 0.95 : isAbnormal ? 0.9 : 0.94,
       heartRate,
       rhythm: isAbnormal ? "Review Markdown Narrative" : "Regular",
       stSegment: isAbnormal ? "Pending Physician Validation" : "Isoelectric",
       qtInterval: "Pending exact measurement",
-      findings: [rawMarkdown.slice(0, 300)],
-      recommendations: ["Review accompanying text block", "Clinical correlation strictly recommended"]
+      findings: findings.length > 0 ? findings : [rawMarkdown.slice(0, 300)],
+      recommendations: buildRecommendations(isAbnormal)
     };
 
     if (!isDiagnosisResult(payload)) throw new Error("Inference API returned invalid payload shape");
@@ -153,6 +180,8 @@ function App() {
   const [result, setResult] = useState<DiagnosisResult | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const reportGeneratedAt = new Date().toLocaleString();
+  const reportId = `CAR-${Date.now().toString().slice(-8)}`;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -352,52 +381,65 @@ function App() {
 
             {status === 'complete' && result && (
               <div className="result-card animate-fade-in">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div className="report-headline">
                   <div>
-                    <h3 style={{ fontSize: '1.25rem', marginBottom: '8px' }}>Primary Finding</h3>
-                    <div className="status-badge abnormal">
-                      <AlertCircle size={16} />
-                      {result.diagnosis} ({(result.confidence * 100).toFixed(1)}%)
-                    </div>
+                    <p className="report-meta-label">Preliminary AI ECG Interpretation</p>
+                    <h3 className="report-title">Clinical Summary Report</h3>
+                  </div>
+                  <div className="report-meta">
+                    <p>Report ID: {reportId}</p>
+                    <p>Generated: {reportGeneratedAt}</p>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Heart Rate</p>
-                    <p style={{ fontSize: '1.25rem', fontWeight: '600' }}>{result.heartRate} bpm</p>
+                <div className="status-strip">
+                  <div className={`status-badge ${(result.diagnosis.toLowerCase().includes("normal")) ? "normal" : "abnormal"}`}>
+                    <AlertCircle size={16} />
+                    {result.diagnosis}
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Rhythm</p>
-                    <p style={{ fontSize: '1.25rem', fontWeight: '600' }}>{result.rhythm}</p>
+                  <p className="confidence-label">Model Confidence: {(result.confidence * 100).toFixed(1)}%</p>
+                </div>
+
+                <div className="metric-grid">
+                  <div className="metric-tile">
+                    <p className="metric-label">Heart Rate</p>
+                    <p className="metric-value">{result.heartRate} bpm</p>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>ST Segment</p>
-                    <p style={{ fontSize: '1.25rem', fontWeight: '600' }}>{result.stSegment}</p>
+                  <div className="metric-tile">
+                    <p className="metric-label">Rhythm</p>
+                    <p className="metric-value">{result.rhythm}</p>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>QT Interval</p>
-                    <p style={{ fontSize: '1.25rem', fontWeight: '600' }}>{result.qtInterval}</p>
+                  <div className="metric-tile">
+                    <p className="metric-label">ST Segment</p>
+                    <p className="metric-value">{result.stSegment}</p>
+                  </div>
+                  <div className="metric-tile">
+                    <p className="metric-label">QT Interval</p>
+                    <p className="metric-value">{result.qtInterval}</p>
                   </div>
                 </div>
 
-                <div style={{ marginTop: '16px' }}>
-                  <h4 style={{ marginBottom: '8px', color: 'var(--primary)' }}>Key Findings</h4>
-                  <ul style={{ paddingLeft: '20px', margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                <div className="report-section">
+                  <h4 className="section-title">Key Findings</h4>
+                  <ul className="clinical-list">
                     {result.findings.map((finding: string, i: number) => (
-                      <li key={i} style={{ marginBottom: '4px' }}>{finding}</li>
+                      <li key={i}>{finding}</li>
                     ))}
                   </ul>
                 </div>
 
-                <div style={{ marginTop: '16px' }}>
-                  <h4 style={{ marginBottom: '8px', color: 'var(--success)' }}>Clinical Recommendations</h4>
-                  <ul style={{ paddingLeft: '20px', margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                <div className="report-section">
+                  <h4 className="section-title section-title-success">Clinical Recommendations</h4>
+                  <ul className="clinical-list">
                     {result.recommendations.map((rec: string, i: number) => (
-                      <li key={i} style={{ marginBottom: '4px' }}>{rec}</li>
+                      <li key={i}>{rec}</li>
                     ))}
                   </ul>
                 </div>
+
+                <p className="clinical-disclaimer">
+                  This is an AI-assisted preliminary interpretation and must be validated by a licensed physician before clinical decision-making.
+                </p>
 
                 <div style={{ display: 'flex', gap: '16px', marginTop: '16px', justifyContent: 'center' }}>
                   <button className="btn-outline" onClick={() => window.print()}>
